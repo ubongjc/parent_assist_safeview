@@ -316,3 +316,20 @@ model ChatMessage {
   @@index([userId])
   @@index([createdAt])
 }
+
+// Session ratings and feedback
+model SessionRating {
+  id          String   @id @default(cuid())
+  roomId      String   @unique
+  raterId     String   // Person giving the rating
+  rating      Int      // 1-5 stars
+  feedback    String?  // Optional comment
+  helpful     Boolean  @default(true)
+  wouldRecommend Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([raterId])
+  @@index([rating])
+  @@index([createdAt])
+}
