@@ -1,0 +1,180 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+enum UserRole {
+  HELPER
+  ELDER
+  ADMIN
+}
+
+enum RoomStatus {
+  PENDING
+  ACTIVE
+  ENDED
+  EXPIRED
+}
+
+enum ConsentStatus {
+  REQUESTED
+  GRANTED
+  DENIED
+  REVOKED
+}
+
+// User account with passkey support
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String?
+  role              UserRole @default(ELDER)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relationships
+  roomsAsInviter    Room[]   @relation("InviterRooms")
+  roomsAsInvitee    Room[]   @relation("InviteeRooms")
+  redactionRules    RedactionRule[]
+  helpLogs          HelpLog[]
+  consentsGiven     Consent[] @relation("ConsentGiver")
+  consentsRequested Consent[] @relation("ConsentRequester")
+  subscriptions     Subscription[]
+  auditLogs         AuditLog[]
+
+  @@index([email])
+}
+
+// WebRTC room for remote assistance session
+model Room {
+  id          String     @id @default(cuid())
+  inviterId   String
+  inviteeId   String
+  status      RoomStatus @default(PENDING)
+  expiresAt   DateTime
+  startedAt   DateTime?
+  endedAt     DateTime?
+  metadata    Json?      // Store room settings, WebRTC config, etc.
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relationships
+  inviter     User       @relation("InviterRooms", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee     User       @relation("InviteeRooms", fields: [inviteeId], references: [id], onDelete: Cascade)
+  helpLogs    HelpLog[]
+  consents    Consent[]
+
+  @@index([inviterId])
+  @@index([inviteeId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+// Auto-redaction rules for sensitive information
+model RedactionRule {
+  id          String   @id @default(cuid())
+  userId      String
+  pattern     String   // Regex pattern for redaction
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+// Log of helper actions during session
+model HelpLog {
+  id          String   @id @default(cuid())
+  roomId      String
+  helperId    String
+  action      String   // e.g., "viewed_screen", "guided_tap", "ended_session"
+  metadata    Json?    // Additional context
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  helper      User     @relation(fields: [helperId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([helperId])
+  @@index([createdAt])
+}
+
+// Explicit consent tracking
+model Consent {
+  id          String        @id @default(cuid())
+  roomId      String
+  giverId     String        // Person giving consent (elder)
+  requesterId String        // Person requesting access (helper)
+  status      ConsentStatus @default(REQUESTED)
+  message     String?       // Optional message with consent request
+  grantedAt   DateTime?
+  revokedAt   DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relationships
+  room        Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  giver       User          @relation("ConsentGiver", fields: [giverId], references: [id], onDelete: Cascade)
+  requester   User          @relation("ConsentRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([giverId])
+  @@index([requesterId])
+  @@index([status])
+}
+
+// Family/Elder-care subscription management
+model Subscription {
+  id                String   @id @default(cuid())
+  userId            String
+  stripeCustomerId  String?  @unique
+  stripeSubscriptionId String? @unique
+  plan              String   // e.g., "family", "elder_care"
+  status            String   // e.g., "active", "canceled", "past_due"
+  currentPeriodEnd  DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relationships
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([stripeCustomerId])
+  @@index([status])
+}
+
+// Audit log for compliance and security
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String   // e.g., "data_export", "data_delete", "consent_revoked"
+  resource    String?  // Resource type (room, user, etc.)
+  resourceId  String?  // ID of the resource
+  metadata    Json?    // Additional context
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
