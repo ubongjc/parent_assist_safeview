@@ -83,9 +83,8 @@ class AuthenticationManager: ObservableObject {
     }
 
     private func loadStoredCredentials() {
-        // Load from Keychain
-        // For demo purposes
-        if let token = UserDefaults.standard.string(forKey: "authToken") {
+        // Load from secure Keychain storage
+        if let token = KeychainHelper.shared.getString(forKey: KeychainHelper.Keys.authToken) {
             self.authToken = token
             self.isAuthenticated = true
 
@@ -104,6 +103,22 @@ class AuthenticationManager: ObservableObject {
         authToken = nil
         currentUser = nil
         isAuthenticated = false
-        UserDefaults.standard.removeObject(forKey: "authToken")
+
+        // Securely remove credentials from Keychain
+        KeychainHelper.shared.delete(forKey: KeychainHelper.Keys.authToken)
+        KeychainHelper.shared.delete(forKey: KeychainHelper.Keys.userId)
+        KeychainHelper.shared.delete(forKey: KeychainHelper.Keys.refreshToken)
+    }
+
+    // MARK: - Token Storage
+    /// Securely save authentication token to Keychain
+    func saveAuthToken(_ token: String) {
+        self.authToken = token
+        KeychainHelper.shared.save(token, forKey: KeychainHelper.Keys.authToken)
+    }
+
+    /// Securely save user ID to Keychain
+    func saveUserId(_ userId: String) {
+        KeychainHelper.shared.save(userId, forKey: KeychainHelper.Keys.userId)
     }
 }
