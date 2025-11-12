@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
+import { safeParseInt, isValidDateString } from '@/lib/validations'
+import { sanitizeInput } from '@/lib/security'
 import { z } from 'zod'
 
 const sendMessageSchema = z.object({
@@ -67,11 +69,14 @@ export async function GET(
     }
 
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '100')
+    const limit = safeParseInt(searchParams.get('limit'), 100, 1, 500)
     const before = searchParams.get('before')
 
     const where: any = { roomId }
     if (before) {
+      if (!isValidDateString(before)) {
+        return NextResponse.json({ error: 'Invalid date format' }, { status: 400 })
+      }
       where.createdAt = { lt: new Date(before) }
     }
 
@@ -190,7 +195,8 @@ export async function POST(
       )
     }
 
-    const { message, type, metadata } = validation.data
+    const { type, metadata } = validation.data
+    const message = sanitizeInput(validation.data.message)
 
     // Create message
     const chatMessage = await prisma.chatMessage.create({

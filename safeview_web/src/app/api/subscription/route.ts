@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
+import { createSubscriptionSchema } from '@/lib/validations'
 import {
   createStripeCustomer,
   createCheckoutSession,
@@ -117,14 +118,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { planId } = body
+    const validation = createSubscriptionSchema.safeParse(body)
 
-    // Validate plan
-    if (!planId || !['PRO', 'FAMILY', 'ENTERPRISE'].includes(planId.toUpperCase())) {
-      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: validation.error.errors },
+        { status: 400 }
+      )
     }
 
-    const plan = SUBSCRIPTION_PLANS[planId.toUpperCase() as SubscriptionPlanId]
+    const { planId } = validation.data
+    const plan = SUBSCRIPTION_PLANS[planId as SubscriptionPlanId]
 
     if (!plan.priceId) {
       return NextResponse.json({ error: 'Plan not available for checkout' }, { status: 400 })

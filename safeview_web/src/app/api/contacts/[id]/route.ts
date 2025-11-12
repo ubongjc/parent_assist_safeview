@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
-import { z } from 'zod'
-
-const updateContactSchema = z.object({
-  status: z.enum(['ACCEPTED', 'BLOCKED']).optional(),
-  nickname: z.string().optional(),
-  group: z.string().optional(),
-  isEmergency: z.boolean().optional(),
-  isFavorite: z.boolean().optional(),
-})
+import { updateContactSchema } from '@/lib/validations'
 
 /**
  * @openapi

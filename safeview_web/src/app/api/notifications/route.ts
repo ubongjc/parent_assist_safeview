@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
+import { updateNotificationsSchema, safeParseInt } from '@/lib/validations'
 
 /**
  * @openapi
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const unreadOnly = searchParams.get('unreadOnly') === 'true'
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const limit = safeParseInt(searchParams.get('limit'), 50, 1, 200)
 
     const where: any = { userId }
     if (unreadOnly) {
@@ -97,7 +98,16 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { notificationIds, markAllRead } = body
+    const validation = updateNotificationsSchema.safeParse(body)
+
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: validation.error.errors },
+        { status: 400 }
+      )
+    }
+
+    const { notificationIds, markAllRead } = validation.data
 
     if (markAllRead) {
       await prisma.notification.updateMany({
@@ -110,7 +120,7 @@ export async function PUT(request: NextRequest) {
       })
     }
 
-    if (notificationIds && Array.isArray(notificationIds)) {
+    if (notificationIds) {
       await prisma.notification.updateMany({
         where: {
           id: { in: notificationIds },
@@ -124,6 +134,7 @@ export async function PUT(request: NextRequest) {
       })
     }
 
+    // This should never be reached due to Zod validation, but keep for safety
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   } catch (error) {
     console.error('Error updating notifications:', error)
