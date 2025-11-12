@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/prisma'
-import { createRoomSchema } from '@/lib/validations'
+import { createRoomSchema, safeParseInt } from '@/lib/validations'
+import { sanitizeInput } from '@/lib/security'
 import { RoomStatus, ConsentStatus } from '@prisma/client'
 
 /**
@@ -61,7 +62,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { inviteeId, durationMinutes, message } = validation.data
+    const { inviteeId, durationMinutes } = validation.data
+    const message = validation.data.message ? sanitizeInput(validation.data.message) : undefined
 
     // Check if invitee exists
     const invitee = await prisma.user.findUnique({
@@ -186,7 +188,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') as RoomStatus | null
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const limit = safeParseInt(searchParams.get('limit'), 20, 1, 100)
 
     const where: any = {
       OR: [
